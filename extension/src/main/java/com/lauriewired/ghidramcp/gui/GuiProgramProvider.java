@@ -26,6 +26,8 @@ public class GuiProgramProvider implements ProgramProvider {
 
 	private final PluginTool tool;
 
+	public PluginTool getTool() { return tool; }
+
 	public GuiProgramProvider(PluginTool tool) {
 		this.tool = tool;
 	}
@@ -43,7 +45,7 @@ public class GuiProgramProvider implements ProgramProvider {
 
 	@Override
 	public Set<String> capabilities() {
-		return Set.of(CAP_GUI_CONTEXT);
+		return Set.of(CAP_GUI_CONTEXT, "project_control");
 	}
 
 	@Override

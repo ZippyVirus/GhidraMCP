@@ -5,6 +5,11 @@
 [![GitHub contributors](https://img.shields.io/github/contributors/LaurieWired/GhidraMCP)](https://github.com/LaurieWired/GhidraMCP/graphs/contributors)
 [![Follow @lauriewired](https://img.shields.io/twitter/follow/lauriewired?style=social)](https://twitter.com/lauriewired)
 
+This branch adds [live GUI project control](docs/project-control.md): program
+switching, guarded byte edits, saves, analysis, registered script/build actions,
+and modal dialog inspection/responses. It contains no game binaries or
+project-specific build paths.
+
 ![ghidra_MCP_logo](https://github.com/user-attachments/assets/4986d702-be3f-4697-acce-aea55cd79ad3)
 
 

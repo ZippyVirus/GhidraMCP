@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -10,6 +11,11 @@ from mcp.server.fastmcp.exceptions import ToolError
 from ghidra_mcp.backend import BackendError, GhidraBackend
 
 CAP_GUI_CONTEXT = "gui_context"
+
+PROJECT_CONTROL_TOOLS = (
+    "list_project_programs", "select_project_program", "patch_program_bytes", "save_project_program",
+    "analyze_project_program", "run_project_script", "project_job", "ghidra_dialogs", "respond_to_ghidra_dialog",
+)
 
 GUI_ONLY_TOOLS = ("get_current_address", "get_current_function")
 
@@ -259,5 +265,63 @@ def create_server(
         """Set the end-of-line comment at an address (shown in the disassembly). An empty comment
         clears it."""
         return post("set_disassembly_comment", address=address, comment=comment)
+
+    if capabilities is None or "project_control" in capabilities:
+
+        @mcp.tool()
+        def list_project_programs() -> Result:
+            """List domain files/programs in the live GUI project, open status, and active job."""
+            return get("project")
+
+        @mcp.tool()
+        def select_project_program(project: str, path: str) -> Result:
+            """Open/activate an absolute project program path without manual tab navigation.
+            The project name must match. First-open analysis prompts are suppressed,
+            without claiming analysis has run. Confirm get_program_info afterwards."""
+            return post("select_program", project=project, path=path)
+
+        @mcp.tool()
+        def patch_program_bytes(project: str, path: str, changes: list[dict[str, Any]]) -> Result:
+            """Apply one guarded Ghidra transaction. Each change has address, old/new hex,
+            and optional disassemble boolean. All expected bytes and ranges must pass
+            before any edit; failures roll back. Does not automatically save."""
+            return post("patch_bytes", project=project, path=path, changes=json.dumps(changes))
+
+        @mcp.tool()
+        def save_project_program(project: str, path: str) -> Result:
+            """Save the named program in the expected live GUI project."""
+            return post("save_program", project=project, path=path)
+
+        @mcp.tool()
+        def analyze_project_program(project: str, path: str) -> Result:
+            """Start auto-analysis using the program's configured analyzers. Poll project_job.
+            Preserves existing analysis; results remain unsaved until explicitly saved."""
+            return post("project_action", project=project, path=path, action="analyze")
+
+        @mcp.tool()
+        def run_project_script(project: str, script_path: str, arguments: list[str] | None = None) -> Result:
+            """Run a script from a registered Ghidra script directory in the live GUI project.
+            Poll project_job for completion/logs. A script can invoke project-specific
+            build/export actions and has the full authority of the Ghidra process.
+            Only run trusted scripts within the user's authorized task scope."""
+            return post("project_action", project=project, action="script", script_path=script_path,
+                        arguments=json.dumps(arguments or []))
+
+        @mcp.tool()
+        def project_job() -> Result:
+            """Get the latest analysis/script job ID, state, result or error. One job at a time."""
+            return get("project_job")
+
+        @mcp.tool()
+        def ghidra_dialogs() -> Result:
+            """Inspect visible Ghidra dialog IDs, titles, text, and enabled buttons."""
+            return get("dialogs")
+
+        @mcp.tool()
+        def respond_to_ghidra_dialog(project: str, id: str, button: str) -> Result:
+            """Respond to an inspected Ghidra dialog using its current ID and exact button.
+            Does not accept arbitrary window targets or silently approve every dialog.
+            Respect the user's authorization for the action the button triggers."""
+            return post("respond_dialog", project=project, id=id, button=button)
 
     return mcp

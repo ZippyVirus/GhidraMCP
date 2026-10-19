@@ -26,8 +26,8 @@ import ghidra.util.Msg;
 import ghidra.util.task.TaskMonitor;
 
 /**
- * Loopback-only HTTP backend used by the ghidra-mcp Python server. Requests are handled one at a
- * time on a dedicated thread.
+ * Loopback-only HTTP backend used by the ghidra-mcp Python server. Normal requests are serialized; dialog control remains
+ * available on a separate HTTP worker while a modal GUI dialog is open.
  */
 public final class BackendHttpServer {
 
@@ -46,6 +46,7 @@ public final class BackendHttpServer {
 	private final ProgramProvider provider;
 	private final GhidraAnalysisService service;
 	private final Map<String, Route> routes = new LinkedHashMap<>();
+	private ExecutorService operations;
 	private HttpServer server;
 	private ExecutorService executor;
 
@@ -60,12 +61,15 @@ public final class BackendHttpServer {
 		stop();
 		server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
 		server.createContext("/", this::dispatch);
-		executor = Executors.newSingleThreadExecutor(r -> {
+		executor = Executors.newFixedThreadPool(4, r -> {
 			Thread t = new Thread(r, "GhidraMCP-HTTP");
 			t.setDaemon(true);
 			return t;
 		});
-		server.setExecutor(executor);
+		operations = Executors.newSingleThreadExecutor(r -> {
+            Thread t=new Thread(r,"GhidraMCP-Operations");t.setDaemon(true);return t;
+        });
+        server.setExecutor(executor);
 		server.start();
 		Msg.info(this, "GhidraMCP backend listening on 127.0.0.1:" + getPort());
 	}
@@ -79,6 +83,9 @@ public final class BackendHttpServer {
 			server.stop(1);
 			server = null;
 		}
+		if (operations != null) {
+            operations.shutdownNow();operations=null;
+        }
 		if (executor != null) {
 			executor.shutdownNow();
 			executor = null;
@@ -87,6 +94,17 @@ public final class BackendHttpServer {
 
 	private void registerRoutes() {
 		TaskMonitor monitor = TaskMonitor.DUMMY;
+        if(provider instanceof com.lauriewired.ghidramcp.gui.GuiProgramProvider gui) {
+            ProjectControlService control=new ProjectControlService(gui);
+            routes.put("/project",new Route("GET",false,(q,p)->control.list()));
+            routes.put("/select_program",new Route("POST",false,(q,p)->control.select(q)));
+            routes.put("/patch_bytes",new Route("POST",false,(q,p)->control.patch(q)));
+            routes.put("/save_program",new Route("POST",false,(q,p)->control.save(q)));
+            routes.put("/project_action",new Route("POST",false,(q,p)->control.start(q)));
+            routes.put("/project_job",new Route("GET",false,(q,p)->control.status()));
+            routes.put("/dialogs",new Route("GET",false,(q,p)->control.dialogs()));
+            routes.put("/respond_dialog",new Route("POST",false,(q,p)->control.respond(q)));
+        }
 
 		routes.put("/health", new Route("GET", false, (q, p) -> health(p)));
 		get("/program_info", (q, p) -> service.getProgramInfo(p));
@@ -175,11 +193,18 @@ public final class BackendHttpServer {
 					path + " requires " + route.method());
 			}
 			Request request = Request.parse(exchange);
-			Program program = provider.getProgram();
-			if (route.needsProgram() && program == null) {
-				throw McpException.noProgram();
-			}
-			send(exchange, 200, Json.success(route.handler().handle(request, program)));
+            // Queue normal work on a single worker without occupying HTTP
+            // workers. Dialog control stays reachable even if normal requests
+            // are queued behind one blocked by a modal Swing dialog.
+            if(path.equals("/dialogs") || path.equals("/respond_dialog")
+                || path.equals("/health") || path.equals("/project_job")) {
+                complete(exchange,route,request);
+            } else {
+                operations.execute(()-> {
+                    try {complete(exchange,route,request);}
+                    catch(IOException e) {Msg.debug(this,"Client disconnected",e);}
+                });
+            }
 		}
 		catch (McpException e) {
 			send(exchange, e.status(), Json.error(e.code(), e.getMessage()));
@@ -190,6 +215,21 @@ public final class BackendHttpServer {
 			send(exchange, 500, Json.error("INTERNAL_ERROR", message));
 		}
 	}
+
+    private void complete(HttpExchange exchange,Route route,Request request) throws IOException {
+        try {send(exchange,200,Json.success(handle(route,request)));}
+        catch(McpException e) {send(exchange,e.status(),Json.error(e.code(),e.getMessage()));}
+        catch(Throwable t) {
+            Msg.error(this,"GhidraMCP request failed",t);
+            send(exchange,500,Json.error("INTERNAL_ERROR",t.getMessage()!=null?t.getMessage():t.toString()));
+        }
+    }
+
+    private Object handle(Route route,Request request) {
+        Program program=provider.getProgram();
+        if(route.needsProgram() && program==null)throw McpException.noProgram();
+        return route.handler().handle(request,program);
+    }
 
 	private static boolean hostAllowed(HttpExchange exchange) {
 		String host = exchange.getRequestHeaders().getFirst("Host");
