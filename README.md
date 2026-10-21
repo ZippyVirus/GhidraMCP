@@ -73,6 +73,8 @@ Theoretically, any MCP client should work with ghidraMCP. Most clients accept a 
 
 The server IP and port are configurable and should be set to point to the target Ghidra instance. If not set, both will default to localhost:8080.
 
+Several CodeBrowser windows can be open at once. The first one uses the configured port; later ones take a free port and register it in `~/.ghidra_mcp/instances`. Use `list_ghidra_instances` to see them, and pass `instance` (a port or part of the window/program name) to any tool to target one window. See [docs/multi-window.md](docs/multi-window.md).
+
 For clients that connect to a URL instead of launching a command, first run the MCP server yourself:
 
 ```

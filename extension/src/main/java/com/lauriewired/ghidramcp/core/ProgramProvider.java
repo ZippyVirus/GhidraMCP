@@ -1,5 +1,6 @@
 package com.lauriewired.ghidramcp.core;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -26,6 +27,11 @@ public interface ProgramProvider {
 
 	default Address getCurrentAddress() {
 		throw McpException.unsupported("The current GUI location is not available in " + mode() + " mode");
+	}
+
+	/** @return details that tell this backend apart from other open windows, or null */
+	default Map<String, Object> instanceInfo() {
+		return null;
 	}
 
 	/** @return a data type service for type lookups, or null if none is available */

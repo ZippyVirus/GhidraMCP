@@ -160,6 +160,11 @@ public final class BackendHttpServer {
 		health.put("ghidra_version", Application.getApplicationVersion());
 		health.put("mode", provider.mode());
 		health.put("capabilities", new TreeSet<>(provider.capabilities()));
+		health.put("port", getPort());
+		Map<String, Object> instance = provider.instanceInfo();
+		if (instance != null) {
+			health.put("instance", instance);
+		}
 		if (program != null) {
 			Map<String, Object> info = new LinkedHashMap<>();
 			info.put("name", program.getName());

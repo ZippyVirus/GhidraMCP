@@ -16,6 +16,7 @@ from ghidra_mcp.backend import (
     DeferredBackend,
     GhidraBackend,
 )
+from ghidra_mcp.instances import InstanceSet
 from ghidra_mcp.server import create_server
 
 logger = logging.getLogger("ghidra_mcp")
@@ -129,7 +130,14 @@ def main(argv: list[str] | None = None) -> None:
 
 def run_gui(args: argparse.Namespace) -> None:
     backend = GhidraBackend(args.ghidra_server, args.connect_timeout, args.timeout)
+    instances = InstanceSet(backend)
     health = backend.health()
+    if health is None:
+        # The configured window is closed, but another registered one may be open.
+        live = instances.discover(refresh=True)
+        if live:
+            backend.base_url = live[0]["url"]
+            health = backend.health()
     if health is None:
         logger.warning(
             "GhidraMCP backend at %s is not reachable yet; tools will fail until Ghidra is "
@@ -140,13 +148,14 @@ def run_gui(args: argparse.Namespace) -> None:
     else:
         program = (health.get("program") or {}).get("name", "no program open")
         logger.info(
-            "Connected to Ghidra %s (%s mode): %s",
+            "Connected to Ghidra %s (%s mode) at %s: %s",
             health.get("ghidra_version"),
             health.get("mode"),
+            backend.base_url,
             program,
         )
         capabilities = set(health.get("capabilities", []))
-    mcp = create_server(backend, args.mcp_host, args.mcp_port, capabilities)
+    mcp = create_server(backend, args.mcp_host, args.mcp_port, capabilities, instances)
     serve(mcp, args)
 
 

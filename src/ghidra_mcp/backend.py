@@ -51,10 +51,19 @@ class GhidraBackend:
     def post(self, endpoint: str, **params: Any) -> Any:
         return self.request("POST", endpoint, params)
 
-    def request(self, method: str, endpoint: str, params: dict[str, Any] | None = None) -> Any:
-        """Calls the backend and returns the response's `data`, or raises BackendError."""
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        base_url: str | None = None,
+    ) -> Any:
+        """Calls the backend and returns the response's `data`, or raises BackendError.
+
+        `base_url` targets another backend (another CodeBrowser window) for this call only."""
         params = {k: v for k, v in (params or {}).items() if v is not None}
-        url = urljoin(self.base_url, endpoint.lstrip("/"))
+        base_url = base_url or self.base_url
+        url = urljoin(base_url, endpoint.lstrip("/"))
         try:
             if method == "GET":
                 response = self.session.get(url, params=params, timeout=self.timeout)
@@ -63,7 +72,7 @@ class GhidraBackend:
         except requests.ConnectionError as e:
             raise BackendError(
                 "BACKEND_UNAVAILABLE",
-                f"Cannot reach the GhidraMCP backend at {self.base_url}. Is Ghidra running with "
+                f"Cannot reach the GhidraMCP backend at {base_url}. Is Ghidra running with "
                 f"the GhidraMCP plugin enabled and a program open? ({e.__class__.__name__})",
             ) from e
         except requests.Timeout as e:
@@ -125,7 +134,13 @@ class DeferredBackend(GhidraBackend):
         self.status = "failed"
         self._ready.set()
 
-    def request(self, method: str, endpoint: str, params: dict[str, Any] | None = None) -> Any:
+    def request(
+        self,
+        method: str,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        base_url: str | None = None,
+    ) -> Any:
         if not self._ready.wait(self.wait_timeout):
             raise BackendError(
                 "NOT_READY",
@@ -133,4 +148,4 @@ class DeferredBackend(GhidraBackend):
             )
         if self._failure is not None:
             raise BackendError("HEADLESS_FAILED", self._failure)
-        return super().request(method, endpoint, params)
+        return super().request(method, endpoint, params, base_url)

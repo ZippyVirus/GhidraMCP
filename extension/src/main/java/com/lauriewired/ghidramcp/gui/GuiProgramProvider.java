@@ -1,6 +1,8 @@
 package com.lauriewired.ghidramcp.gui;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -46,6 +48,16 @@ public class GuiProgramProvider implements ProgramProvider {
 	@Override
 	public Set<String> capabilities() {
 		return Set.of(CAP_GUI_CONTEXT, "project_control");
+	}
+
+	@Override
+	public Map<String, Object> instanceInfo() {
+		Map<String, Object> info = new LinkedHashMap<>();
+		// The window title name, e.g. "CodeBrowser" or "CodeBrowser(2)".
+		info.put("tool", tool.getName());
+		info.put("project", tool.getProject() != null ? tool.getProject().getName() : null);
+		info.put("pid", ProcessHandle.current().pid());
+		return info;
 	}
 
 	@Override

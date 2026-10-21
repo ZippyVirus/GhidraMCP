@@ -3,6 +3,7 @@ package com.lauriewired;
 import java.io.IOException;
 
 import com.lauriewired.ghidramcp.gui.GuiProgramProvider;
+import com.lauriewired.ghidramcp.gui.InstanceRegistry;
 import com.lauriewired.ghidramcp.http.BackendHttpServer;
 
 import ghidra.app.plugin.PluginCategoryNames;
@@ -28,6 +29,7 @@ public class GhidraMCPPlugin extends Plugin {
 	private static final int DEFAULT_PORT = 8080;
 
 	private BackendHttpServer backend;
+	private InstanceRegistry registry;
 
 	public GhidraMCPPlugin(PluginTool tool) {
 		super(tool);
@@ -46,13 +48,28 @@ public class GhidraMCPPlugin extends Plugin {
 			backend.start(port);
 		}
 		catch (IOException e) {
-			Msg.error(this, "Could not start the GhidraMCP backend on 127.0.0.1:" + port +
-				". Is the port in use (for example by another CodeBrowser window)?", e);
+			// Usually another CodeBrowser window already holds the configured port. Take a free
+			// one instead; ghidra-mcp finds it through the instance registry.
+			try {
+				backend.start(0);
+				Msg.info(this, "Port " + port + " is in use; this CodeBrowser's GhidraMCP backend " +
+					"uses 127.0.0.1:" + backend.getPort() + " instead.");
+			}
+			catch (IOException e2) {
+				Msg.error(this, "Could not start the GhidraMCP backend on 127.0.0.1:" + port +
+					" or on a free port.", e2);
+				return;
+			}
 		}
+		registry = InstanceRegistry.register(backend.getPort());
 	}
 
 	@Override
 	protected void dispose() {
+		if (registry != null) {
+			registry.unregister();
+			registry = null;
+		}
 		if (backend != null) {
 			backend.stop();
 			backend = null;

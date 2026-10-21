@@ -41,6 +41,9 @@ endpoints. Dialogs are not silently approved: inspect their text and explicitly
 choose an enabled button using its current ID. Normal operations stay serialized
 on a separate worker so HTTP workers can answer dialogs while normal work queues.
 
+With several CodeBrowser windows open, each runs its own backend and project job; see
+[multi-window.md](multi-window.md) for the `instance` argument on every tool.
+
 Validation is recorded in [project-control-validation.md](project-control-validation.md).
 Current limits: GUI-only project control; one job at a time; no cancellation
 endpoint; dialog buttons rather than arbitrary text/file chooser entry; no new
